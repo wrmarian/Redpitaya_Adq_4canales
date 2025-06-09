@@ -1,0 +1,16 @@
+# Archivos compilados
+__pycache__/
+*.py[cod]
+
+# Notebooks y salidas
+*.ipynb
+*.log
+
+# Archivos temporales
+*.h5
+*.bak
+*.tmp
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
