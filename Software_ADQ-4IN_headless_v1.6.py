@@ -1,6 +1,18 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# -----------------------------CONFIG-----------------------------------
+EDGE = "NE"
+H_TR = 4
+H_TR_L = -0.05
+READ_CH = [1, 2, 3, 4]
+S_TRIG = {1: (-0.05,'n')}
+COMMENTS = "fuera_de_bunker"
+NREADS = 10000
+VERBOSE = True
+
+# ----------------------------------------------------------------------
+
 # ======================================================================
 #        Adquisición Multicanal de Datos en 4 Canales para Red Pitaya
 # ======================================================================
@@ -125,9 +137,6 @@
 # https://redpitaya.readthedocs.io/en/latest/intro.html
 # #==============================================================
 
-# In[30]:
-
-
 import os
 import time
 import numpy as np
@@ -138,178 +147,20 @@ import rp
 from rp_overlay import overlay
 import pathlib
 from matplotlib import pyplot as plt
+import argparse
+
+# -----------------------------PARSER-----------------------------------
+
+parser = argparse.ArgumentParser(
+            description='')
+parser.add_argument('-c','--comments', default=COMMENTS)
+parser.add_argument('-n','--nreads', default=NREADS, type=int)
+args = parser.parse_args()
+
+run_comment = args.comments
+nreads = args.nreads
 
 # -----------------------------FUNCIONES-----------------------------------
-
-def get_free_space_mb(path="/"):
-    """Obtiene el espacio libre en la SD en MB."""
-    statvfs = os.statvfs(path)
-    free_space = statvfs.f_bavail * statvfs.f_frsize
-    return free_space / (1024 * 1024)
-
-
-def interpolate_params(channels):
-    """Interpola los parámetros F y P (en KB) en función de la cantidad de canales (para 32 muestras)."""
-    if channels <= 1:
-        return 2.68, 1.59
-    elif channels >= 4:
-        return 5.10, 2.30
-    else:
-        F = 2.68 + (5.10 - 2.68) * (channels - 1) / (4 - 1)
-        P = 1.59 + (2.30 - 1.59) * (channels - 1) / (4 - 1)
-        return F, P
-
-
-def estimate_file_size(channels, samples, events):
-    """Estima el tamaño del archivo (en KB) en función de los eventos."""
-    data_payload = (channels * samples * 4) / 1024.0
-    F, P = interpolate_params(channels)
-    total_size = F + (events - 1) * (data_payload + P)
-    return total_size
-
-
-def get_max_events_or_time(samples, channels):
-    """Permite configurar límite por cantidad de eventos o duración."""
-    print("\n\n=================================================================")
-    print("\033[1m   Configuración de almacenamiento de datos\033[0m")
-    print("=================================================================\n")
-
-    free_space = get_free_space_mb()
-    available_space_mb = free_space - 200  # Deja 200 MB libres
-    if available_space_mb <= 0:
-        print("⚠️ No hay suficiente espacio libre en la SD. Libera espacio antes de continuar.")
-        exit()
-
-    available_space_kb = available_space_mb * 1024
-    per_event_size = estimate_file_size(channels, samples, 1)
-    max_events = int(available_space_kb // per_event_size)
-
-    print(f"🔷 Espacio disponible (dejando 200 MB libres): {available_space_mb:.2f} MB")
-    print(f"🔷 Máximo de eventos que se pueden guardar: {max_events}")
-
-    print("\n🔴 ¿Deseas limitar la grabación por cantidad de eventos o por duración?")
-    print("    E - número de eventos (default)")
-    print("    T - duración en minutos")
-    option = input(" ").strip().lower()
-
-    if option == 't':
-        while True:
-            try:
-                minutes = float(input("⏳ ¿Cuántos minutos deseas grabar? (Ej: 1.5): ").strip())
-                if minutes <= 0:
-                    raise ValueError("El tiempo debe ser mayor que cero.")
-                print(f"✅ Se grabará durante {minutes} minutos o hasta llenar la SD.")
-                return {'mode': 'time', 'duration_minutes': minutes, 'max_events': max_events}
-            except ValueError as e:
-                print(f"⚠️ Entrada inválida: {e}")
-    else:
-        default_events = 10
-        try:
-            user_input = input(f"🔴 ¿Cuántos eventos deseas guardar? (Máximo {max_events}, Enter usa {default_events}): ").strip()
-            num_events = int(user_input) if user_input else default_events
-        except ValueError:
-            print("⚠️ Entrada inválida. Se guardarán 10 eventos por defecto.")
-            num_events = default_events
-
-        num_events = min(num_events, max_events)
-        est_size = estimate_file_size(channels, samples, num_events)
-        print(f"🔷 Tamaño estimado para {num_events} eventos: {est_size:.2f} KB")
-        return {'mode': 'events', 'num_events': num_events}
-
-
-def select_channels(available_channels=[1, 2, 3, 4]):
-    """Permite seleccionar qué canales capturar."""
-    user_input = input("🔴 Ingresa los canales a capturar (Ej: 1,2,3,4 o 1 2 3 4). 'Enter' usa todos: ")
-    if user_input.strip() == "":
-        return available_channels
-    try:
-        channels = [int(ch) for ch in user_input.replace(",", " ").split() if ch.strip().isdigit()]
-        channels = [ch for ch in channels if ch in available_channels]
-        return channels if channels else available_channels
-    except:
-        print("⚠️ Error en la entrada, usando todos los canales.")
-        return available_channels
-
-def select_soft_trg(channels_to_acquire, available_channels):
-    """Permite filtrar eventos por amplitud antes de guardar."""
-    user_input = input("🔴 Ingresa en qué canales aplicar soft trigger (Ej: 1,2,3,4 o 1 2 3 4). 'Enter' para ninguno: ")
-    if user_input.strip() == "":
-        return({})
-    try:
-        channels = [int(ch) for ch in user_input.replace(",", " ").split() if ch.strip().isdigit()]
-        channels = [ch for ch in channels if ch in available_channels]
-    except:
-        print("⚠️ Error en la entrada. Usando 'ninguno'.")
-        return({})
-    soft_trig = {}
-    for ch in channels: 
-        while True:
-            op = (input(f"🔴 Ingresa condición de corte para el umbral {ch} ('P': mayor que, 'N': menor que): ")).lower()
-            match op:
-                case 'p':
-                    break
-                case 'n':
-                    break
-        
-        th = input(f"🔴 Ingresa amplitud de corte para canal {ch}: ")
-        if th == "":
-            soft_trig[ch]=(0,op)
-        try:
-            soft_trig[ch] = (float(th), op)
-        except ValueError:
-            print("Error. Ingrese un número.")
-    return(soft_trig)
-
-def select_trigger_source():
-    """Selecciona canal y flanco del trigger."""
-    edge_input = input("🔴 Tipo de flanco (P = positivo, N = negativo) [Default: P]: ").strip().upper()
-    edge = edge_input if edge_input in ["P", "N"] else "P"
-
-    while True:
-        channel_input = input("🔴 Canal de trigger (1–4) [Default: 1]: ").strip()
-        try:
-            ch = int(channel_input) if channel_input else 1
-            if ch in [1, 2, 3, 4]:
-                break
-            else:
-                print("⚠️ Canal inválido. Debe ser 1 a 4.")
-        except ValueError:
-            print("⚠️ Entrada inválida, usando canal 1.")
-
-    channel_letter = ["A", "B", "C", "D"][ch - 1]
-    suffix = "PE" if edge == "P" else "NE"
-    const_name = f"RP_TRIG_SRC_CH{channel_letter}_{suffix}"
-    trigger_source = getattr(rp, const_name)
-    trigger_channel = getattr(rp, f"RP_CH_{ch}")
-
-    print(f"   --> Trigger: Canal {ch}, flanco {'positivo' if edge == 'P' else 'negativo'} ({const_name})")
-
-    return trigger_source, trigger_channel, ch, suffix
-
-
-def get_user_input(prompt, default_value, cast_type=float):
-    """Obtiene un valor del usuario, con valor por defecto."""
-    user_input = input(f"{prompt} ('Enter' usa {default_value}): ").strip()
-    try:
-        return cast_type(user_input) if user_input else default_value
-    except ValueError:
-        print("⚠️ Entrada inválida, usando valor por defecto.")
-        return default_value
-
-
-def create_custom_time():
-    """Permite crear una fecha/hora personalizada."""
-    while True:
-        try:
-            day = int(input("📅 Día (1–31): "))
-            month = int(input("📅 Mes (1–12): "))
-            year = int(input("📅 Año (ej. 2025): "))
-            hour = int(input("🕒 Hora (0–23): "))
-            minute = int(input("🕒 Minuto (0–59): "))
-            return datetime(year, month, day, hour, minute, 0)
-        except ValueError as e:
-            print(f"❌ Error: {e}. Intenta de nuevo.")
-
 
 def generar_nombre_archivo(file_index):
     """Genera nombre de archivo secuencial."""
@@ -329,13 +180,18 @@ def generar_nombre_carpeta(set_time, channel, trig_lvl, comment=""):
         folder_name = f"Data_{day_time_of_first_pulse}_TCH{channel}_TL{trig_str}mV_{comment}"
     return folder_name
 
+def select_trigger_source():
+    """Selecciona canal y flanco del trigger."""
+    ch = H_TR
+    channel_letter = ["A", "B", "C", "D"][ch - 1]
+    suffix = EDGE
+    const_name = f"RP_TRIG_SRC_CH{channel_letter}_{suffix}"
+    trigger_source = getattr(rp, const_name)
+    trigger_channel = getattr(rp, f"RP_CH_{ch}")
 
+    return trigger_source, trigger_channel, ch, suffix
 
 # -----------------------------INICIO DEL PROGRAMA-----------------------------------
-
-print("=================================================================")
-print("\033[1m          Adquisición de datos para Red Pitaya\033[0m")
-print("=================================================================\n")
 
 try:
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -343,16 +199,10 @@ except NameError:
     pass
 
 set_time = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires"))
-print(f"\033[1m     Hora del sistema: {set_time}\033[0m\n")
-time_option = input(f"🔴 ¿Usar hora del sistema o personalizada? (S = sistema, C = custom): ").strip().lower()
-if time_option == 'c':
-    set_time = create_custom_time()
-    print(f"ℹ️ Hora utilizada: {set_time}\n")
 
 sys_time_ns = int(datetime.now().timestamp() * 1e9)
 set_time_ns = int(set_time.timestamp() * 1e9)
 
-print("\n🟢 INICIANDO FPGA...\n")
 fpga = overlay()
 rp.rp_Init()
 
@@ -360,46 +210,41 @@ dec = rp.RP_DEC_1
 trig_dly = 0
 N = 16384
 
-print("\n\n=================================================================")
-print("\033[1m   Configuración de los parámetros de adquisición\033[0m")
-print("=================================================================\n")
-
 acq_trig_sour, trig_channel, channel, flanco = select_trigger_source()
-trig_lvl = get_user_input("🔴 Nivel de trigger [V]", 0.01)
+
+trig_lvl = H_TR_L
 
 rp.rp_AcqSetTriggerSrc(acq_trig_sour)
 rp.rp_AcqSetTriggerLevel(trig_channel, trig_lvl)
 
-samples = get_user_input("\n🔴 Número de muestras por evento", 32, int)
-samples_delay = get_user_input("🔴 Delay de muestras", 8, int)
+samples = 32
+samples_delay = 8
 
 available_channels = [1, 2, 3, 4]
-channels_to_acquire = select_channels(available_channels)
-soft_trig = select_soft_trg(channels_to_acquire, available_channels)
-run_comment = str(input("🔴 Comentario o nombre de Run: "))
+channels_to_acquire = READ_CH
+
+soft_trig = S_TRIG
+
 num_channels = len(channels_to_acquire)
-config = get_max_events_or_time(samples, num_channels)
-print(config)
+config = {'mode': 'events', 'num_events': nreads, 'duration_minutes': 0}
 
 fs = 125e6 / dec
 dt = 1 / fs
 time_axis = np.linspace(0, (samples - 1) * dt, samples)
 
-print("\n\n=================================================================")
-print("\033[1m PARÁMETROS DE ADQUISICIÓN SELECCIONADOS\033[0m")
-print("=================================================================\n")
-print(f"🔷 Frecuencia de muestreo = {fs/1e6:.2f} MHz")
-print(f"🔷 Canal de trigger: {channel}")
-print(f"🔷 Flanco = {flanco}")
-print(f"🔷 Nivel de trigger = {trig_lvl} V")
-print(f"🔷 Muestras por evento = {samples}")
-print(f"🔷 Delay de muestras = {samples_delay}")
-print(f"🔷 Canales seleccionados = {channels_to_acquire}")
-print(f"🔷 Hora del sistema: {set_time}")
-if config['mode'] == 'events':
-    print(f"🔷 Eventos a adquirir: {config['num_events']}.\n")
-else:
-    print(f"🔷 Adquisición durante {config['duration_minutes']} minutos.\n")
+if VERBOSE:
+    print(f"🔷 Frecuencia de muestreo = {fs/1e6:.2f} MHz")
+    print(f"🔷 Canal de trigger: {channel}")
+    print(f"🔷 Flanco = {flanco}")
+    print(f"🔷 Nivel de trigger = {trig_lvl} V")
+    print(f"🔷 Muestras por evento = {samples}")
+    print(f"🔷 Delay de muestras = {samples_delay}")
+    print(f"🔷 Canales seleccionados = {channels_to_acquire}")
+    print(f"🔷 Hora del sistema: {set_time}")
+    if config['mode'] == 'events':
+        print(f"🔷 Eventos a adquirir: {config['num_events']}.\n")
+    else:
+        print(f"🔷 Adquisición durante {config['duration_minutes']} minutos.\n")
 
 day_time_of_first_pulse = set_time.strftime('%Y%m%d_%H%M')
 
@@ -417,7 +262,6 @@ folder_name = generar_nombre_carpeta(set_time, channel, trig_lvl, run_comment)
 output_dir = BASE_DIR / folder_name
 output_dir.mkdir(exist_ok=True, parents=True)
 os.chdir(output_dir)
-print(f"📂 Ruta a carpeta de DATOS: {output_dir}\n")
 
 # CONFIGURACIÓN DE PARTICIONAMIENTO
 file_threshold_bytes = 10 * 1024 * 1024  # 10 MB
@@ -432,13 +276,10 @@ max_wait_between_triggers = 60
 max_total_duration = config['duration_minutes'] * 60 if config['mode'] == 'time' else float('inf')
 max_events = config['num_events'] if config['mode'] == 'events' else config['max_events']
 
-print("\033[1m🟢 INICIANDO ADQUISICIÓN...\033[0m\n")
 
 trigger_times = []
 first_trigger_ns = None
-print("\n=========================================================")
-print(f"   Ciclo            Estado            Tiempo relativo  ")
-print("=========================================================")
+
 while True:
     elapsed_total = time.time() - start_time
     if config['mode'] == 'events' and event >= max_events:
@@ -446,7 +287,8 @@ while True:
     if config['mode'] == 'time' and (elapsed_total >= max_total_duration or event >= max_events):
         break
 
-    print(f" {event + 1}/{'∞' if config['mode'] == 'time' else max_events}\t        Esperando   trigger  ")
+    if VERBOSE:
+        print(f"Progreso: {event + 1}/{max_events}  ", end='\r')
 
 
 
@@ -460,7 +302,8 @@ while True:
             triggered = True
             break
         if (time.time() - wait_start) >= max_wait_between_triggers:
-            print("No se detectaron triggers durante el tiempo máximo de espera. Finalizando...")
+            if VERBOSE:
+                print("No se detectaron triggers durante el tiempo máximo de espera. Finalizando...")
             triggered = False
             break
         if config['mode'] == 'time' and (time.time() - start_time) >= max_total_duration:
@@ -489,8 +332,6 @@ while True:
         relative_ns = trigger_time_ns - first_trigger_ns
     
     # imprimir en ns (o elegir unidad legible si preferís)
-    print(f"               → Trigger detectado         {round(relative_ns/1e6)} ms   ")
-    print("---------------------------------------------------------")
 
     if h5file is None:
         current_filename = generar_nombre_archivo(file_index)
@@ -570,7 +411,6 @@ while True:
             h5file.attrs['duration_minutes'] = config['duration_minutes']
         else:
             h5file.attrs['num_events'] = config['num_events']
-        print(f"\n📁 Nuevo archivo creado: {current_filename}\n")
 
     # --- Guardar evento ---
     if soft_pass_flag:
@@ -590,10 +430,9 @@ if h5file is not None:
     h5file.close()
 rp.rp_Release()
 
-print("\n✅ Adquisición finalizada.")
-
 if trigger_times:
     elapsed_time = (trigger_times[-1] - trigger_times[0]) / 1e9
-    print(f"\n⏱️ Tiempo entre primer y último trigger: {elapsed_time:.6f} s")
+    if VERBOSE:
+        print(f"\nAdquisición finalizada. Tiempo entre primer y último trigger: {elapsed_time:.6f} s")
 
 
