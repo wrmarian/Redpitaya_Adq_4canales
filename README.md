@@ -67,7 +67,7 @@ XXXX_Data_DDMMYYYY_HHMM.npz
 - `timestamps_ns`: timestamp de trigger por evento.
 - `time_axis_s`: eje temporal de cada ventana adquirida.
 - `channel_1` ... `channel_4`: matrices `[evento, muestra]` por canal.
-- `metadata`: diccionario con parámetros de adquisición.
+- `metadata`: cadena JSON con los parámetros de adquisición.
 
 ---
 

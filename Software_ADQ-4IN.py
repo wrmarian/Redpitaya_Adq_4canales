@@ -11,6 +11,8 @@ import numpy as np
 import rp
 from rp_overlay import overlay
 
+MIN_ELAPSED_TIME_S = 1e-9
+
 
 def get_user_input(prompt, default_value, cast_type=float):
     value = input(f"{prompt} ('Enter' usa {default_value}): ").strip()
@@ -23,9 +25,8 @@ def get_user_input(prompt, default_value, cast_type=float):
         return default_value
 
 
-def select_channels(available_channels=None):
-    if available_channels is None:
-        available_channels = [1, 2, 3, 4]
+def select_channels(available_channels=(1, 2, 3, 4)):
+    available_channels = list(available_channels)
     user_input = input("🔴 Canales a capturar (Ej: 1,2,3,4). 'Enter' usa todos: ").strip()
     if user_input == "":
         return available_channels
@@ -105,7 +106,7 @@ def read_window_vnp(channel_enum, start_pos, samples, total_buffer_size):
         except TypeError:
             # Python bindings may expose a different signature across versions.
             pass
-        except Exception:
+        except (RuntimeError, AttributeError):
             # Some RP builds can raise runtime exceptions for unsupported calls.
             pass
 
@@ -148,7 +149,7 @@ def save_npz_batch(base_name, file_index, timestamps, time_axis, channels, data_
         "timestamps_ns": np.asarray(timestamps, dtype=np.int64),
         "time_axis_s": time_axis.astype(np.float32),
         "channels": np.asarray(channels, dtype=np.int16),
-        "metadata_json": np.asarray(json.dumps(metadata, ensure_ascii=False)),
+        "metadata": np.asarray(json.dumps(metadata, ensure_ascii=False)),
     }
     for ch in channels:
         payload[f"channel_{ch}"] = np.asarray(data_by_channel[ch], dtype=np.float32)
@@ -186,7 +187,7 @@ def run_counter_mode(channels, samples, samples_delay, total_buffer_size, fs, tr
                     per_channel_delta_ts[ch].append((ts_ns - last_ts) / 1e9)
                 per_channel_last_ts[ch] = ts_ns
 
-    elapsed_s = max((time.time_ns() - start_ns) / 1e9, 1e-9)
+    elapsed_s = max((time.time_ns() - start_ns) / 1e9, MIN_ELAPSED_TIME_S)
 
     print("\n================ RESULTADOS MODO CONTADOR ================")
     print(f"Eventos (triggers) adquiridos: {event_count}")
@@ -251,7 +252,7 @@ def run_npz_mode(channels, samples, samples_delay, total_buffer_size, fs, trig_s
         filename = save_npz_batch(base_name, file_index, timestamps, time_axis, channels, data_by_channel, metadata)
         print(f"📁 Archivo guardado: {filename} ({len(timestamps)} eventos)")
 
-    elapsed_s = max((time.time_ns() - start_ns) / 1e9, 1e-9)
+    elapsed_s = max((time.time_ns() - start_ns) / 1e9, MIN_ELAPSED_TIME_S)
     print("\n================ RESULTADOS MODO NPZ ================")
     print(f"Eventos (triggers) adquiridos: {event_count}")
     print(f"Tiempo total de adquisición: {elapsed_s:.6f} s")
