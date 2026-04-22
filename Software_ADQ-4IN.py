@@ -3,6 +3,7 @@
 
 import os
 import time
+import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -91,7 +92,7 @@ def _extract_data_from_result(result, expected_size):
 
 
 def read_window_vnp(channel_enum, start_pos, samples, total_buffer_size):
-    # Camino optimizado: rp_AcqGetDataPosVNP
+    # Optimized path: rp_AcqGetDataPosVNP
     call_attempts = [
         lambda: rp.rp_AcqGetDataPosVNP(channel_enum, start_pos, samples),
         lambda: rp.rp_AcqGetDataPosVNP(channel_enum, int(start_pos), int(samples)),
@@ -102,11 +103,13 @@ def read_window_vnp(channel_enum, start_pos, samples, total_buffer_size):
             if data is not None and data.size == samples:
                 return data
         except TypeError:
+            # Python bindings may expose a different signature across versions.
             pass
         except Exception:
+            # Some RP builds can raise runtime exceptions for unsupported calls.
             pass
 
-    # Respaldo por compatibilidad si la API Python local no expone VNP igual
+    # Compatibility fallback when VNP access is not available in local bindings.
     buffer_full = rp.fBuffer(total_buffer_size)
     rp.rp_AcqGetOldestDataV(channel_enum, total_buffer_size, buffer_full)
     rotated = np.asarray([buffer_full[i] for i in range(total_buffer_size)], dtype=np.float32)
@@ -145,7 +148,7 @@ def save_npz_batch(base_name, file_index, timestamps, time_axis, channels, data_
         "timestamps_ns": np.asarray(timestamps, dtype=np.int64),
         "time_axis_s": time_axis.astype(np.float32),
         "channels": np.asarray(channels, dtype=np.int16),
-        "metadata": np.array([metadata], dtype=object),
+        "metadata_json": np.asarray(json.dumps(metadata, ensure_ascii=False)),
     }
     for ch in channels:
         payload[f"channel_{ch}"] = np.asarray(data_by_channel[ch], dtype=np.float32)

@@ -11,7 +11,7 @@ El sistema ha sido desarrollado en Python y permite configurar de forma flexible
 - Adquisición multicanal (1 a 4 canales).
 - Trigger configurable (nivel de umbral y canal).
 - Selección del número de eventos o tiempo de adquisición, muestras por evento y delay relativo al trigger.
-- **Modo contador de pulsos**: cálculo de tasa por canal y \u0394t entre pulsos consecutivos.
+- **Modo contador de pulsos**: cálculo de tasa por canal y Δt entre pulsos consecutivos.
 - **Modo escritura en SD (NPZ)**: almacenamiento comprimido por lotes en archivos `.npz`.
 - Lectura de datos optimizada desde buffer circular con `rp.rp_AcqGetDataPosVNP`.
 
