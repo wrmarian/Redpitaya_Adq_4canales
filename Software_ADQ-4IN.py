@@ -214,10 +214,7 @@ def read_event_data_pos_vnp(ptr_trig, channels_to_acquire, samples, samples_dela
         if not read_ok:
             fb = rp.fBuffer(N)
             rp.rp_AcqGetOldestDataV(rp_ch, N, fb)
-            data[f"channel_{ch}"] = np.array(
-                [fb[i + N // 2 - samples_delay] for i in range(samples)],
-                dtype=np.float32,
-            )
+            data[f"channel_{ch}"] = np.array([fb[(start_pos + i) % N] for i in range(samples)], dtype=np.float32)
 
     return data
 
@@ -302,7 +299,7 @@ else:
     print(f"🔷 Adquisición durante {config['duration_minutes']} minutos.\n")
 
 day_time_of_first_pulse = set_time.strftime("%Y%m%d_%H%M")
-BASE_DIR = pathlib.Path("/home/jupyter/RedPitaya/DATOS").resolve()
+BASE_DIR = pathlib.Path(os.getenv("REDPITAYA_DATA_DIR", "/home/jupyter/RedPitaya/DATOS")).resolve()
 folder_name = generar_nombre_carpeta(set_time, channel, trig_lvl)
 output_dir = BASE_DIR / folder_name
 output_dir.mkdir(exist_ok=True, parents=True)
@@ -374,7 +371,7 @@ while True:
             break
         if config["mode"] == "time" and (time.time() - start_time) >= max_total_duration:
             break
-        time.sleep(0.00005)
+        time.sleep(0.0001)
 
     if not triggered:
         rp.rp_AcqStop()

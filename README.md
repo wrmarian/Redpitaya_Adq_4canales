@@ -61,7 +61,7 @@ python3 Software_ADQ-4IN.py
 Cada archivo generado sigue la forma:
 
 ```
-Data_YYYYMMDD_HHMM_XXXX.npz
+Data_{YYYYMMDD_HHMM}_{0001..}.npz
 ```
 
 ### Contenido:
