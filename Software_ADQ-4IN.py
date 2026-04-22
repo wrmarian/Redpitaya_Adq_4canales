@@ -316,7 +316,8 @@ event = 0
 start_time = time.time()
 trigger_times_linux = []
 
-max_wait_between_triggers = 60
+MAX_WAIT_BETWEEN_TRIGGERS_S = 60
+LOG_EVERY_EVENTS = 100
 max_total_duration = config["duration_minutes"] * 60 if config["mode"] == "time" else float("inf")
 max_events = config["num_events"] if config["mode"] == "events" else config["max_events"]
 
@@ -366,7 +367,7 @@ while True:
             ptr_trig = rp.rp_AcqGetWritePointerAtTrig()[1]
             triggered = True
             break
-        if (time.time() - wait_start) >= max_wait_between_triggers:
+        if (time.time() - wait_start) >= MAX_WAIT_BETWEEN_TRIGGERS_S:
             print("No se detectaron triggers durante el tiempo máximo de espera. Finalizando...")
             break
         if config["mode"] == "time" and (time.time() - start_time) >= max_total_duration:
@@ -417,7 +418,8 @@ while True:
         chunk_meta = []
         chunk_size_bytes = 0
 
-    print(f"Evento {event}: Δt = {delta_ns / 1e3:.1f} us")
+    if event <= 10 or event % LOG_EVERY_EVENTS == 0:
+        print(f"Evento {event}: Δt = {delta_ns / 1e3:.1f} us")
 
 saved_file = flush_npz(
     output_dir=output_dir,
