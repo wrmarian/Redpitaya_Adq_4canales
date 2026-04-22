@@ -1,217 +1,105 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# ==============================================================
-#        Adquisición de Datos en 4 Canales para Red Pitaya
-# ==============================================================
-# 
-# Desarrollado por Ing. Mattenet Mariana 
-# Departamento de Telecomunicaciones
-# Instituto Balseiro - Comisión Nacional de Energía Atómica -
-# Año: 2025
-# 
-# Descripción:
-# ------------
-# Este script permite la adquisición de datos en una Red Pitaya, capturando 
-# señales en múltiples canales de manera simultánea con un trigger basado en 
-# un umbral configurable. Los datos se almacenan en archivos HDF5 para una 
-# manipulación eficiente.
-# 
-# Funcionalidades principales:
-# ----------------------------
-# - Selección de canales de adquisición (1 a 4).
-# - Configuración de parámetros de adquisición:
-#   * Nivel de trigger (V)
-#   * Número de muestras por evento
-#   * Delay de muestras
-# - Cálculo automático del número máximo de eventos según el espacio disponible en SD.
-# - Creación y manejo de archivos HDF5 para almacenar los datos de forma estructurada.
-# - División de archivos cuando alcanzan un umbral de tamaño.
-# - Configuración de la hora de adquisición (automática o manual).
-# 
-# Flujo del programa:
-# -------------------
-# 1. Configuración del entorno y selección de la hora de adquisición.
-# 2. Inicialización de la FPGA y configuración del sistema de adquisición.
-# 3. Selección de canales y parámetros de adquisición.
-# 4. Cálculo del número de eventos posibles según el espacio disponible.
-# 5. Inicio de la adquisición:
-#     - Espera de eventos con trigger.
-#     - Captura de datos y almacenamiento en archivos HDF5.
-#     - Creación de nuevos archivos si se supera el tamaño umbral.
-# 6. Finalización del proceso y liberación de la FPGA.
-# 
-# Formato de los archivos HDF5 generados:
-# ----------------------------------------
-# - Nombre del archivo: `XXXX_Data_DDMMYYYY_HHMM.h5`
-#   (XXXX: índice secuencial, DDMMYYYY_HHMM: fecha/hora del primer evento)
-# - Atributos generales:
-#   * Hora de inicio de adquisición
-#   * Tasa de muestreo
-#   * Nivel de trigger
-#   * Número de muestras por evento y delay
-#   * Canales utilizados
-#   * Cantidad total de eventos
-# - Estructura por evento:
-#   /event_000001/
-#     ├── channel_1 (array de muestras)
-#     ├── channel_2 (array de muestras)
-#     ├── channel_3 (array de muestras)
-#     ├── channel_4 (array de muestras)
-#     ├── timestamp (marca de tiempo del trigger)
-# 
-# Advertencias:
-# -------------
-# - Asegúrese de que la tarjeta SD tenga suficiente espacio libre (al menos 200 MB recomendados).
-# - Verifique que la Red Pitaya esté correctamente conectada y configurada antes de iniciar la adquisición.
-# - Si no se detectan triggers, el proceso puede quedar esperando eventos.
-# - Tenga en cuenta que el rango de tensión de las entradas de la Red Pitaya depende de la configuración del
-# jumper en la placa (HV: ±20 V, LV: ±1 V). Se recomienda verificar que las señales a adquirir estén dentro
-# del rango adecuado antes de comenzar la adquisición.
-# 
-# Para más información, consulte la documentación oficial:
-# https://redpitaya.readthedocs.io/en/latest/intro.html
-# 
-# Uso:
-# ----
-# Simplemente ejecute el script en Python. Se le pedirá que ingrese los parámetros necesarios.
-# 
-# Para más información, consulte la documentación oficial de Red Pitaya:
-# https://redpitaya.readthedocs.io/en/latest/intro.html
-# 
-# Descripción:
-# Este programa realiza la adquisición de datos en una Red Pitaya, 
-# capturando señales en hasta 4 canales de manera simultánea con un trigger 
-# basado en un umbral en el canal 2 (opcional). Utiliza un buffer circular de 
-# tamaño 16,384 muestras y permite configurar parámetros como número de muestras 
-# por evento, retraso de muestras y cantidad de eventos a capturar.
-# 
-# Antes de iniciar la adquisición, se deben configurar los parametros de adquisicion 
-# deseados y seleccionar si la captura será continua o acotada al espacio libre en 
-# la SD de la RedPitaya. Si se elige esta última opción el programa verifica el 
-# espacio libre en la SD y se calcula el número máximo de eventos permitidos, asegurando 
-# al menos 200 MB libres. 
-# 
-# Los datos adquiridos se almacenan en formato HDF5, permitiendo optimización y 
-# manipulación eficiente de grandes volúmenes de datos. Si se desea trabajar con 
-# adquisición de grandes volumenes de datos se puede ejecutar el programa monitor_hdf5
-# que transmite los datos capturados a traves de la red y los borra de la memoria de la
-# RedPitaya para liberar espacio.
-# 
-# Nota: El rango de tensión de las entradas de la Red Pitaya depende de la 
-# configuración del jumper en la placa (HV: ±20 V, LV: ±1 V). Se recomienda 
-# verificar que las señales medidas estén dentro del rango adecuado antes 
-# de la adquisición. Para más información, consulte la documentación oficial:
-# https://redpitaya.readthedocs.io/en/latest/intro.html
-# 
-# ==============================================================
-# 
-
-# In[1]:
-
-
-# ==============================================================
-#        Adquisición de Datos en 4 Canales para Red Pitaya
-# ==============================================================
-#
-# Desarrollado por Ing. Mattenet Mariana 
-# Departamento de Telecomunicaciones
-# Instituto Balseiro - Comisión Nacional de Energía Atómica -
-# Año: 2025
-#
-# Descripción:
-# Este programa realiza la adquisición de datos en una Red Pitaya, 
-# capturando señales en hasta 4 canales de manera simultánea con un trigger 
-# basado en un umbral en el canal 2 (opcional). Utiliza un buffer circular de 
-# tamaño 16,384 muestras y permite configurar parámetros como número de muestras 
-# por evento, retraso de muestras y cantidad de eventos a capturar.
-#
-# Antes de iniciar la adquisición, se verifica el espacio libre en la SD 
-# y se calcula el número máximo de eventos permitidos, asegurando al menos 
-# 200 MB libres. Los datos adquiridos se almacenan en formato HDF5, 
-# permitiendo optimización y manipulación eficiente de grandes volúmenes 
-# de datos. Si se desea trabajar con adquisición de grandes volumenes de datos
-# se puede ejecutar el programa monitor_hdf5 que transmite los datos capturados a 
-# traves de la red y los borra de la memoria de la RedPitaya para liberar espacio.
-#
-# Nota: El rango de tensión de las entradas de la Red Pitaya depende de la 
-# configuración del jumper en la placa (HV: ±20 V, LV: ±1 V). Se recomienda 
-# verificar que las señales medidas estén dentro del rango adecuado antes 
-# de la adquisición. Para más información, consulte la documentación oficial:
-# https://redpitaya.readthedocs.io/en/latest/intro.html
-#
-# ==============================================================
-
-
-# In[2]:
-
-
+import json
 import os
+import pathlib
 import time
-import numpy as np
-import h5py
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+import numpy as np
 import rp
 from rp_overlay import overlay
-from matplotlib import pyplot as plt
 
-# -----------------------------FUNCIONES-----------------------------------
+
+def get_delta_time_ns(ptr_trig, N, fs, state):
+    """Tiempo entre triggers consecutivos en ns (con manejo de wrap del buffer circular)."""
+    if state["prev_ptr"] is None:
+        state["prev_ptr"] = ptr_trig
+        return 0
+
+    if ptr_trig >= state["prev_ptr"]:
+        delta_samples = ptr_trig - state["prev_ptr"]
+    else:
+        delta_samples = ptr_trig + N - state["prev_ptr"]
+
+    state["prev_ptr"] = ptr_trig
+    return int(delta_samples * (1e9 / fs))
+
 
 def get_free_space_mb(path="/"):
-    """Obtiene el espacio libre en la SD en MB."""
     statvfs = os.statvfs(path)
-    free_space = statvfs.f_bavail * statvfs.f_frsize  
+    free_space = statvfs.f_bavail * statvfs.f_frsize
     return free_space / (1024 * 1024)
 
+
 def interpolate_params(channels):
-    """Interpola los parámetros F y P (en KB) en función de la cantidad de canales (para 32 muestras)."""
     if channels <= 1:
         return 2.68, 1.59
-    elif channels >= 4:
+    if channels >= 4:
         return 5.10, 2.30
-    else:
-        F = 2.68 + (5.10 - 2.68) * (channels - 1) / (4 - 1)
-        P = 1.59 + (2.30 - 1.59) * (channels - 1) / (4 - 1)
-        return F, P
+    F = 2.68 + (5.10 - 2.68) * (channels - 1) / (4 - 1)
+    P = 1.59 + (2.30 - 1.59) * (channels - 1) / (4 - 1)
+    return F, P
 
-def estimate_file_size(channels, samples, events):
-    """Estima el tamaño del archivo (en KB) en función de los eventos."""
-    data_payload = (channels * samples * 4) / 1024.0  
+
+def estimate_file_size_kb(channels, samples, events):
+    data_payload = (channels * samples * 4) / 1024.0
     F, P = interpolate_params(channels)
-    total_size = F + (events - 1) * (data_payload + P)
-    return total_size
+    return F + (events - 1) * (data_payload + P)
 
-def get_max_events(samples, channels):
-    """Calcula el número máximo de eventos que se pueden almacenar, solicitando al usuario el número deseado."""
+
+def get_max_events_or_time(samples, channels):
     print("\n\n=================================================================")
     print("\033[1m   Configuración de almacenamiento de datos\033[0m")
     print("=================================================================\n")
+
     free_space = get_free_space_mb()
-    available_space_mb = free_space - 200  # Dejamos 200 MB libres
+    available_space_mb = free_space - 200
     if available_space_mb <= 0:
         print("⚠️ No hay suficiente espacio libre en la SD. Libera espacio antes de continuar.")
-        exit()
+        raise SystemExit(1)
+
     available_space_kb = available_space_mb * 1024
-    per_event_size = estimate_file_size(channels, samples, 1)
-    F, _ = interpolate_params(channels)
-    max_events = int((available_space_kb) // per_event_size)
-    default_events = 10
-    try:
-        print(f"\nℹ️ Usted puede almacenar en la memoria SD de la Redpitaya un máximo de {max_events} eventos")
-        user_input = input(f"🔴 ¿Cuántos eventos deseas guardar? (Máximo: {max_events}, 'Enter' usa {default_events}): ").strip()
-        num_events = int(user_input) if user_input else default_events
-    except ValueError:
-        print("⚠️ Entrada inválida. Se guardarán 10 eventos por defecto.")
-        num_events = default_events
-    est_size = estimate_file_size(channels, samples, num_events)
+    per_event_size_kb = estimate_file_size_kb(channels, samples, 1)
+    max_events = int(available_space_kb // per_event_size_kb)
+
     print(f"🔷 Espacio disponible (dejando 200 MB libres): {available_space_mb:.2f} MB")
     print(f"🔷 Máximo de eventos que se pueden guardar: {max_events}")
-    print(f"🔷 Tamaño estimado para {num_events} eventos: {est_size:.2f} KB")
-    return min(num_events, max_events)
+    print("\n🔴 ¿Deseas limitar la grabación por cantidad de eventos o por duración?")
+    print("    E - número de eventos (default)")
+    print("    T - duración en minutos")
+    option = input(" ").strip().lower()
 
-def select_channels(available_channels=[1, 2, 3, 4]):
-    """Permite al usuario seleccionar qué canales capturar."""
+    if option == "t":
+        while True:
+            try:
+                minutes = float(input("⏳ ¿Cuántos minutos deseas grabar? (Ej: 1.5): ").strip())
+                if minutes <= 0:
+                    raise ValueError("El tiempo debe ser mayor que cero.")
+                return {"mode": "time", "duration_minutes": minutes, "max_events": max_events}
+            except ValueError as e:
+                print(f"⚠️ Entrada inválida: {e}")
+    else:
+        default_events = 10
+        try:
+            user_input = input(
+                f"🔴 ¿Cuántos eventos deseas guardar? (Máximo {max_events}, Enter usa {default_events}): "
+            ).strip()
+            num_events = int(user_input) if user_input else default_events
+        except ValueError:
+            print("⚠️ Entrada inválida. Se guardarán 10 eventos por defecto.")
+            num_events = default_events
+        num_events = min(num_events, max_events)
+        est_size = estimate_file_size_kb(channels, samples, num_events)
+        print(f"🔷 Tamaño estimado para {num_events} eventos: {est_size:.2f} KB")
+        return {"mode": "events", "num_events": num_events}
+
+
+def select_channels(available_channels=None):
+    if available_channels is None:
+        available_channels = [1, 2, 3, 4]
     user_input = input("🔴 Ingresa los canales a capturar (Ej: 1,2,3,4 o 1 2 3 4). 'Enter' usa todos: ")
     if user_input.strip() == "":
         return available_channels
@@ -219,12 +107,35 @@ def select_channels(available_channels=[1, 2, 3, 4]):
         channels = [int(ch) for ch in user_input.replace(",", " ").split() if ch.strip().isdigit()]
         channels = [ch for ch in channels if ch in available_channels]
         return channels if channels else available_channels
-    except:
+    except Exception:
         print("⚠️ Error en la entrada, usando todos los canales.")
         return available_channels
 
+
+def select_trigger_source():
+    edge_input = input("🔴 Tipo de flanco (P = positivo, N = negativo) [Default: N]: ").strip().upper()
+    edge = edge_input if edge_input in ["P", "N"] else "N"
+
+    while True:
+        channel_input = input("🔴 Canal de trigger (1–4) [Default: 1]: ").strip()
+        try:
+            ch = int(channel_input) if channel_input else 1
+            if ch in [1, 2, 3, 4]:
+                break
+            print("⚠️ Canal inválido. Debe ser 1 a 4.")
+        except ValueError:
+            print("⚠️ Entrada inválida, usando canal 1.")
+
+    channel_letter = ["A", "B", "C", "D"][ch - 1]
+    suffix = "PE" if edge == "P" else "NE"
+    const_name = f"RP_TRIG_SRC_CH{channel_letter}_{suffix}"
+    trigger_source = getattr(rp, const_name)
+    trigger_channel = getattr(rp, f"RP_CH_{ch}")
+    print(f"   --> Trigger: Canal {ch}, flanco {'positivo' if edge == 'P' else 'negativo'} ({const_name})")
+    return trigger_source, trigger_channel, ch, suffix
+
+
 def get_user_input(prompt, default_value, cast_type=float):
-    """Obtiene un valor del usuario, usando un valor por defecto si no se ingresa nada."""
     user_input = input(f"{prompt} ('Enter' usa {default_value}): ").strip()
     try:
         return cast_type(user_input) if user_input else default_value
@@ -232,190 +143,304 @@ def get_user_input(prompt, default_value, cast_type=float):
         print("⚠️ Entrada inválida, usando valor por defecto.")
         return default_value
 
+
 def create_custom_time():
-    """Permite crear una fecha/hora personalizada."""
     while True:
         try:
-            day = int(input("📅 Ingresa el día (1-31): "))
-            if not 1 <= day <= 31:
-                raise ValueError("Día inválido, debe estar entre 1 y 31.")
-            month = int(input("📅 Ingresa el mes (1-12): "))
-            if not 1 <= month <= 12:
-                raise ValueError("Mes inválido, debe estar entre 1 y 12.")
-            year = int(input("📅 Ingresa el año (ej.: 2025): "))
-            hour = int(input("🕒 Ingresa la hora (0-23): "))
-            if not 0 <= hour < 24:
-                raise ValueError("Hora inválida, debe estar entre 0 y 23.")
-            minute = int(input("🕒 Ingresa los minutos (0-59): "))
-            if not 0 <= minute < 60:
-                raise ValueError("Minutos inválidos, deben estar entre 0 y 59.")
+            day = int(input("📅 Día (1–31): "))
+            month = int(input("📅 Mes (1–12): "))
+            year = int(input("📅 Año (ej. 2025): "))
+            hour = int(input("🕒 Hora (0–23): "))
+            minute = int(input("🕒 Minuto (0–59): "))
             return datetime(year, month, day, hour, minute, 0)
         except ValueError as e:
             print(f"❌ Error: {e}. Intenta de nuevo.")
 
-def generar_nombre_archivo(file_index):
-    """Genera un nombre de archivo usando el timestamp del primer pulso y un índice secuencial."""
-    return f"{file_index:04d}_Data_{day_time_of_first_pulse}.h5"
 
-# -----------------------------INICIO DEL PROGRAMA-----------------------------------
+def generar_nombre_archivo(day_time_of_first_pulse, file_index):
+    return f"Data_{day_time_of_first_pulse}_{file_index:04d}.npz"
+
+
+def generar_nombre_carpeta(set_time, channel, trig_lvl):
+    day_time_of_first_pulse = set_time.strftime("%Y%m%d_%H%M")
+    trig_mV = int(round(trig_lvl * 1000))
+    trig_str = f"{trig_mV:+04d}"
+    return f"Data_{day_time_of_first_pulse}_TCH{channel}_TL{trig_str}mV"
+
+
+def read_event_data_pos_vnp(ptr_trig, channels_to_acquire, samples, samples_delay, N):
+    """Lee ventana de muestras por canal usando rp_AcqGetDataPosVNP.
+
+    Incluye fallback compatible para firmwares con firma diferente.
+    """
+    start_pos = (ptr_trig + N - samples_delay) % N
+    data = {}
+
+    for ch in channels_to_acquire:
+        rp_ch = getattr(rp, f"RP_CH_{ch}")
+        out = np.empty(samples, dtype=np.float32)
+        read_ok = False
+
+        call_variants = (
+            lambda: rp.rp_AcqGetDataPosVNP(rp_ch, start_pos, samples, out),
+            lambda: rp.rp_AcqGetDataPosVNP(rp_ch, start_pos, samples),
+            lambda: rp.rp_AcqGetDataPosVNP(rp_ch, start_pos, (start_pos + samples - 1) % N, out),
+        )
+
+        for call in call_variants:
+            try:
+                ret = call()
+                if isinstance(ret, tuple) and len(ret) >= 2:
+                    candidate = np.asarray(ret[-1], dtype=np.float32)
+                    if candidate.size >= samples:
+                        data[f"channel_{ch}"] = candidate[:samples]
+                        read_ok = True
+                        break
+                elif ret is not None and not isinstance(ret, (int, np.integer)):
+                    candidate = np.asarray(ret, dtype=np.float32)
+                    if candidate.size >= samples:
+                        data[f"channel_{ch}"] = candidate[:samples]
+                        read_ok = True
+                        break
+                elif np.any(out):
+                    data[f"channel_{ch}"] = out.copy()
+                    read_ok = True
+                    break
+            except TypeError:
+                continue
+            except Exception:
+                continue
+
+        if not read_ok:
+            fb = rp.fBuffer(N)
+            rp.rp_AcqGetOldestDataV(rp_ch, N, fb)
+            data[f"channel_{ch}"] = np.array(
+                [fb[i + N // 2 - samples_delay] for i in range(samples)],
+                dtype=np.float32,
+            )
+
+    return data
+
+
+def flush_npz(output_dir, day_time_of_first_pulse, file_index, chunk_events, chunk_meta, global_metadata):
+    if not chunk_events:
+        return None
+
+    filename = generar_nombre_archivo(day_time_of_first_pulse, file_index)
+    fullpath = output_dir / filename
+
+    arrays = {
+        "metadata_json": np.array(json.dumps(global_metadata, ensure_ascii=False)),
+        "event_index": np.array([m["event_index"] for m in chunk_meta], dtype=np.int64),
+        "timestamp_fpga_ns": np.array([m["timestamp_fpga_ns"] for m in chunk_meta], dtype=np.int64),
+        "delta_fpga_ns": np.array([m["delta_fpga_ns"] for m in chunk_meta], dtype=np.int64),
+        "timestamp_linux_ns": np.array([m["timestamp_linux_ns"] for m in chunk_meta], dtype=np.int64),
+    }
+
+    channels = global_metadata["channels"]
+    for ch in channels:
+        arrays[f"channel_{ch}"] = np.stack([ev[f"channel_{ch}"] for ev in chunk_events]).astype(np.float32)
+
+    np.savez_compressed(fullpath, **arrays)
+    return filename
+
 
 print("=================================================================")
 print("\033[1m          Adquisición de datos para Red Pitaya\033[0m")
 print("=================================================================\n")
 
-# Cambiar al directorio del script (si se ejecuta como script, __file__ está definido)
 try:
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 except NameError:
-    # En entornos interactivos (__file__ no está definido)
     pass
 
-# ⏳ Configuración de tiempo
-set_time = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires"))
-print(f"\033[1m     Hora del sistema: {set_time}\033[0m\n")
-time_option = input(f"🔴 ¿Desea utilizar la hora del sistema o establecer una personalizada? (S = sistema, C = custom): ").strip().lower()
-if time_option == 'c':
+TZ_AR = ZoneInfo("America/Argentina/Buenos_Aires")
+set_time = datetime.now(TZ_AR)
+print(f"\033[1m     Hora local Argentina: {set_time}\033[0m\n")
+time_option = input("🔴 ¿Usar hora del sistema o personalizada? (S = sistema, C = custom): ").strip().lower()
+if time_option == "c":
     set_time = create_custom_time()
-    print(f"ℹ️ Hora utilizada: {set_time}\n")
-sys_time_ns = int(datetime.now().timestamp() * 1e9)
-set_time_ns = int(set_time.timestamp() * 1e9)
+    print(f"ℹ️ Hora local Argentina: {set_time}\n")
 
-# Definir day_time_of_first_pulse usando la hora seleccionada
-day_time_of_first_pulse = set_time.strftime('%d%m%Y_%H%M')
-
-# 🟢 Inicializar FPGA
 print("\n🟢 INICIANDO FPGA...\n")
 fpga = overlay()
 rp.rp_Init()
 
-# Configuración de adquisición
 dec = rp.RP_DEC_1
 trig_dly = 0
-acq_trig_sour = rp.RP_TRIG_SRC_CHB_NE
 N = 16384
 
-# Pedir al usuario configurar trig_lvl, muestras y delay
-
 print("\n\n=================================================================")
-print("\033[1m   Configuración de los parametros de adquisición\033[0m")
+print("\033[1m   Configuración de los parámetros de adquisición\033[0m")
 print("=================================================================\n")
-trig_lvl = get_user_input("\n🔴 Ingrese el nivel de trigger [V]", 0.01)
-# print(f"ℹ️ Trigger: {trig_lvl} V")
-samples = get_user_input("🔴 Ingrese el número de muestras por evento", 32, int)
-# print("ℹ️ Muestras por evento:", samples)
-samples_delay = get_user_input("🔴 Ingrese el delay de muestras", 8, int)
-# print(f"ℹ️ Delay de muestras: {samples_delay}")
 
-# Seleccionar canales
+acq_trig_sour, trig_channel, channel, flanco = select_trigger_source()
+trig_lvl = get_user_input("🔴 Nivel de trigger [V]", -0.05)
+samples = get_user_input("\n🔴 Número de muestras por evento", 32, int)
+samples_delay = get_user_input("🔴 Delay de muestras", 8, int)
+
 available_channels = [1, 2, 3, 4]
 channels_to_acquire = select_channels(available_channels)
-# print("ℹ️ Canales seleccionados:", channels_to_acquire)
-
 num_channels = len(channels_to_acquire)
-num_events = get_max_events(samples, num_channels)
+config = get_max_events_or_time(samples, num_channels)
 
-# Definir frecuencia de muestreo (fs) y construir el eje de tiempo
 fs = 125e6 / dec
-dt = 1 / fs
-time_axis = np.linspace(0, (samples - 1) * dt, samples)
 
-# Mostrar parámetros de adquisición
 print("\n\n=================================================================")
 print("\033[1m PARÁMETROS DE ADQUISICIÓN SELECCIONADOS\033[0m")
 print("=================================================================\n")
-print(f"\n🔷 Frecuencia de muestreo = {fs/1e6:.2f} MHz")
+print(f"🔷 Frecuencia de muestreo = {fs/1e6:.2f} MHz")
+print(f"🔷 Canal de trigger: {channel}")
+print(f"🔷 Flanco = {flanco}")
 print(f"🔷 Nivel de trigger = {trig_lvl} V")
 print(f"🔷 Muestras por evento = {samples}")
 print(f"🔷 Delay de muestras = {samples_delay}")
-print(f"🔷 Eventos a capturar = {num_events}")
 print(f"🔷 Canales seleccionados = {channels_to_acquire}")
-print(f"🔷 Hora utilizada: {set_time}\n")
-# print("=================================================================\n")
+if config["mode"] == "events":
+    print(f"🔷 Eventos a adquirir: {config['num_events']}\n")
+else:
+    print(f"🔷 Adquisición durante {config['duration_minutes']} minutos.\n")
 
-# CONFIGURACIÓN DE PARTICIONAMIENTO DE ARCHIVOS
-file_threshold_bytes = 0.02 * 1024 * 1024  # Umbral (1 MB)
-current_file_size = 0
+day_time_of_first_pulse = set_time.strftime("%Y%m%d_%H%M")
+BASE_DIR = pathlib.Path("/home/jupyter/RedPitaya/DATOS").resolve()
+folder_name = generar_nombre_carpeta(set_time, channel, trig_lvl)
+output_dir = BASE_DIR / folder_name
+output_dir.mkdir(exist_ok=True, parents=True)
+os.chdir(output_dir)
+print(f"📂 Ruta a carpeta de DATOS: {output_dir}\n")
+
+file_threshold_bytes = 10 * 1024 * 1024
 file_index = 1
-current_filename = generar_nombre_archivo(file_index)
+chunk_events = []
+chunk_meta = []
+chunk_size_bytes = 0
 
-# Abrir el archivo y escribir metadata global
-h5file = h5py.File(current_filename, "w")
-h5file.attrs['set_time'] = set_time_ns
-h5file.attrs['sys_time'] = sys_time_ns
-h5file.attrs['decimation'] = dec
-h5file.attrs['trigger_level'] = trig_lvl
-h5file.attrs['trigger_delay'] = trig_dly
-h5file.attrs['samples_per_event'] = samples
-h5file.attrs['samples_delay'] = samples_delay
-h5file.attrs['channels'] = np.array(channels_to_acquire)
-h5file.attrs['num_events'] = num_events
-h5file.attrs['sampling_rate'] = fs
+event = 0
+start_time = time.time()
+trigger_times_linux = []
 
-# INICIO DE LA ADQUISICIÓN
-trigger_times = []
-# print("\n=================================================================")
+max_wait_between_triggers = 60
+max_total_duration = config["duration_minutes"] * 60 if config["mode"] == "time" else float("inf")
+max_events = config["num_events"] if config["mode"] == "events" else config["max_events"]
+
+state = {"prev_ptr": None}
+fpga_time_ns = 0
+channel_counts = {ch: 0 for ch in channels_to_acquire}
+
+global_metadata = {
+    "timestamp_local_iso": set_time.isoformat(),
+    "timezone": "America/Argentina/Buenos_Aires",
+    "timestamp_utc": set_time.astimezone(ZoneInfo("UTC")).isoformat(),
+    "decimation": int(dec),
+    "trigger_level": float(trig_lvl),
+    "trigger_channel": int(channel),
+    "trigger_flank": flanco,
+    "trigger_delay": int(trig_dly),
+    "samples_per_event": int(samples),
+    "samples_delay": int(samples_delay),
+    "channels": channels_to_acquire,
+    "sampling_rate": float(fs),
+    "mode": config["mode"],
+}
+if config["mode"] == "time":
+    global_metadata["duration_minutes"] = float(config["duration_minutes"])
+else:
+    global_metadata["num_events"] = int(config["num_events"])
+
+rp.rp_AcqSetTriggerLevel(trig_channel, trig_lvl)
+
 print("\033[1m🟢 INICIANDO ADQUISICIÓN...\033[0m\n")
-print(f"📁 Archivo creado: {current_filename}\n")
-for event in range(num_events):
-    print(f"🟡 Ciclo {event + 1}/{num_events}")
+while True:
+    elapsed_total = time.time() - start_time
+    if config["mode"] == "events" and event >= max_events:
+        break
+    if config["mode"] == "time" and (elapsed_total >= max_total_duration or event >= max_events):
+        break
 
     rp.rp_AcqStart()
     rp.rp_AcqSetTriggerSrc(acq_trig_sour)
-    while rp.rp_AcqGetTriggerState()[1] != rp.RP_TRIG_STATE_TRIGGERED:
-        time.sleep(0.001)
-    trigger_time_ns = time.time_ns()
-    trigger_times.append(trigger_time_ns)
-    print(f"🔺 Trigger detectado en {trigger_time_ns} ns")
 
-    time.sleep(samples / (125e6/dec))  
+    wait_start = time.time()
+    triggered = False
+    ptr_trig = 0
 
-    fbuffers = {ch: rp.fBuffer(N) for ch in channels_to_acquire}
-    data = {}    
-    for ch in channels_to_acquire:
-        rp.rp_AcqGetOldestDataV(getattr(rp, f'RP_CH_{ch}'), N, fbuffers[ch])
-        data[f'channel_{ch}'] = np.array([fbuffers[ch][i + N//2 - samples_delay] for i in range(samples)], dtype=np.float32)
+    while True:
+        if rp.rp_AcqGetTriggerState()[1] == rp.RP_TRIG_STATE_TRIGGERED:
+            ptr_trig = rp.rp_AcqGetWritePointerAtTrig()[1]
+            triggered = True
+            break
+        if (time.time() - wait_start) >= max_wait_between_triggers:
+            print("No se detectaron triggers durante el tiempo máximo de espera. Finalizando...")
+            break
+        if config["mode"] == "time" and (time.time() - start_time) >= max_total_duration:
+            break
+        time.sleep(0.00005)
 
-    event_size_bytes = samples * num_channels * 4  
-    if current_file_size + event_size_bytes > file_threshold_bytes:
-        h5file.close()
-        file_index += 1
-        current_filename = generar_nombre_archivo(file_index)
-        h5file = h5py.File(current_filename, "w")
-        h5file.attrs['set_time'] = set_time_ns
-        h5file.attrs['sys_time'] = sys_time_ns
-        h5file.attrs['decimation'] = dec
-        h5file.attrs['trigger_level'] = trig_lvl
-        h5file.attrs['trigger_delay'] = trig_dly
-        h5file.attrs['samples_per_event'] = samples
-        h5file.attrs['samples_delay'] = samples_delay
-        h5file.attrs['channels'] = np.array(channels_to_acquire)
-        h5file.attrs['num_events'] = num_events
-        h5file.attrs['sampling_rate'] = fs
-        current_file_size = 0
-        print(f"\n📁 Se creó un nuevo archivo: {current_filename}\n")
+    if not triggered:
+        rp.rp_AcqStop()
+        break
 
-    group = h5file.create_group(f"event_{event+1:06d}")
-    group.attrs['timestamp'] = trigger_time_ns
-    for ch in channels_to_acquire:
-        group.create_dataset(f"channel_{ch}", data=data[f'channel_{ch}'])
+    delta_ns = get_delta_time_ns(ptr_trig, N, fs, state)
+    fpga_time_ns += delta_ns
+    data = read_event_data_pos_vnp(ptr_trig, channels_to_acquire, samples, samples_delay, N)
 
-    current_file_size += event_size_bytes
     rp.rp_AcqStop()
+    trigger_linux_ns = time.time_ns()
+    trigger_times_linux.append(trigger_linux_ns)
 
-h5file.close()
+    chunk_events.append(data)
+    chunk_meta.append(
+        {
+            "event_index": event + 1,
+            "timestamp_fpga_ns": fpga_time_ns,
+            "delta_fpga_ns": delta_ns,
+            "timestamp_linux_ns": trigger_linux_ns,
+        }
+    )
+    for ch in channels_to_acquire:
+        channel_counts[ch] += 1
+
+    event_size_bytes = samples * num_channels * 4
+    chunk_size_bytes += event_size_bytes
+    event += 1
+
+    if chunk_size_bytes >= file_threshold_bytes:
+        saved_file = flush_npz(
+            output_dir=output_dir,
+            day_time_of_first_pulse=day_time_of_first_pulse,
+            file_index=file_index,
+            chunk_events=chunk_events,
+            chunk_meta=chunk_meta,
+            global_metadata=global_metadata,
+        )
+        if saved_file is not None:
+            print(f"📁 Archivo guardado: {saved_file}")
+        file_index += 1
+        chunk_events = []
+        chunk_meta = []
+        chunk_size_bytes = 0
+
+    print(f"Evento {event}: Δt = {delta_ns / 1e3:.1f} us")
+
+saved_file = flush_npz(
+    output_dir=output_dir,
+    day_time_of_first_pulse=day_time_of_first_pulse,
+    file_index=file_index,
+    chunk_events=chunk_events,
+    chunk_meta=chunk_meta,
+    global_metadata=global_metadata,
+)
+if saved_file is not None:
+    print(f"📁 Archivo guardado: {saved_file}")
+
 rp.rp_Release()
+print("\n✅ Adquisición finalizada.")
 
-print("\n✅ Adquisición completada.")
+elapsed_time = time.time() - start_time
+print(f"\n⏱️ Tiempo total adquisición (Linux): {elapsed_time:.6f} s")
 
-if trigger_times:
-    elapsed_time = (trigger_times[-1] - trigger_times[0]) / 1e9
-    print(f"\n⏱️ Tiempo transcurrido entre el primer y el último trigger: {elapsed_time:.6f} segundos")
-else:
-    print("⚠️ No se detectaron triggers.")
-
-
-# In[ ]:
-
-
-
-
+if elapsed_time > 0:
+    print("\n📈 Tasa por canal:")
+    for ch in channels_to_acquire:
+        rate = channel_counts[ch] / elapsed_time
+        print(f"   CH{ch}: {channel_counts[ch]} eventos, {rate:.2f} eventos/s")

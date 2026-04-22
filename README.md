@@ -2,7 +2,7 @@
 
 Este proyecto implementa un sistema de adquisición de datos multicanal basado en la Red Pitaya modelo STEMlab 125-14-4IN, diseñado para la detección de coincidencias de rayos cósmicos mediante señales captadas por hasta cuatro entradas analógicas.
 
-El sistema ha sido desarrollado en Python y permite configurar de forma flexible los parámetros de adquisición, almacenar los datos en archivos HDF5 y operar tanto en modo local como en modo continuo con transferencia en red.
+El sistema ha sido desarrollado en Python y permite configurar de forma flexible los parámetros de adquisición, almacenar los datos en archivos NPZ y operar tanto en modo local como en modo continuo con transferencia en red.
 
 ---
 
@@ -12,7 +12,7 @@ El sistema ha sido desarrollado en Python y permite configurar de forma flexible
 - Trigger configurable (nivel de umbral y canal).
 - Selección del número de eventos, muestras por evento y delay relativo al trigger.
 - Estimación automática del número máximo de eventos según espacio disponible.
-- Almacenamiento en archivos HDF5 estructurados y rotación automática al superar tamaño límite.
+- Almacenamiento en archivos NPZ y rotación automática al superar tamaño límite.
 - Opción de hora de adquisición automática o manual.
 - Visualización de eventos con gráficos superpuestos por canal.
 - Modo continuo con transferencia de datos por red.
@@ -23,12 +23,12 @@ El sistema ha sido desarrollado en Python y permite configurar de forma flexible
 
 - **Red Pitaya 125-14-4IN** con sistema operativo oficial versión 2.00+
 - Python 3 (instalado por defecto)
-- Librerías Python: `numpy`, `h5py`, `matplotlib`, `os`, `time`, `zoneinfo`
+- Librerías Python: `numpy`, `matplotlib`, `os`, `time`, `zoneinfo`
 
 Instalación de dependencias (si fuera necesario):
 
 ```bash
-pip3 install numpy h5py matplotlib
+pip3 install numpy matplotlib
 ```
 
 ---
@@ -56,20 +56,19 @@ python3 Software_ADQ-4IN.py
 
 ---
 
-## 🗂️ Estructura de archivos HDF5
+## 🗂️ Estructura de archivos NPZ
 
 Cada archivo generado sigue la forma:
 
 ```
-XXXX_Data_DDMMYYYY_HHMM.h5
+Data_YYYYMMDD_HHMM_XXXX.npz
 ```
 
 ### Contenido:
 
-- Atributos globales: hora, trigger, delay, tasa de muestreo, etc.
-- Grupos por evento: `/event_000001/`, `/event_000002/`, ...
-- Datasets por canal: `channel_1`, `channel_2`, ...
-- Timestamp por evento
+- `metadata_json` con metadatos globales de adquisición.
+- Arrays por evento: `event_index`, `timestamp_fpga_ns`, `delta_fpga_ns`, `timestamp_linux_ns`.
+- Arrays de forma `(eventos, muestras)` por canal: `channel_1`, `channel_2`, ...
 
 ---
 
