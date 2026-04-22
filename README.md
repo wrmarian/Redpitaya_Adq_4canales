@@ -10,12 +10,10 @@ El sistema ha sido desarrollado en Python y permite configurar de forma flexible
 
 - Adquisición multicanal (1 a 4 canales).
 - Trigger configurable (nivel de umbral y canal).
-- Selección del número de eventos, muestras por evento y delay relativo al trigger.
-- Estimación automática del número máximo de eventos según espacio disponible.
-- Almacenamiento en archivos HDF5 estructurados y rotación automática al superar tamaño límite.
-- Opción de hora de adquisición automática o manual.
-- Visualización de eventos con gráficos superpuestos por canal.
-- Modo continuo con transferencia de datos por red.
+- Selección del número de eventos o tiempo de adquisición, muestras por evento y delay relativo al trigger.
+- **Modo contador de pulsos**: cálculo de tasa por canal y Δt entre pulsos consecutivos.
+- **Modo escritura en SD (NPZ)**: almacenamiento comprimido por lotes en archivos `.npz`.
+- Lectura de datos optimizada desde buffer circular con `rp.rp_AcqGetDataPosVNP`.
 
 ---
 
@@ -56,20 +54,20 @@ python3 Software_ADQ-4IN.py
 
 ---
 
-## 🗂️ Estructura de archivos HDF5
+## 🗂️ Estructura de archivos NPZ
 
 Cada archivo generado sigue la forma:
 
 ```
-XXXX_Data_DDMMYYYY_HHMM.h5
+XXXX_Data_DDMMYYYY_HHMM.npz
 ```
 
 ### Contenido:
 
-- Atributos globales: hora, trigger, delay, tasa de muestreo, etc.
-- Grupos por evento: `/event_000001/`, `/event_000002/`, ...
-- Datasets por canal: `channel_1`, `channel_2`, ...
-- Timestamp por evento
+- `timestamps_ns`: timestamp de trigger por evento.
+- `time_axis_s`: eje temporal de cada ventana adquirida.
+- `channel_1` ... `channel_4`: matrices `[evento, muestra]` por canal.
+- `metadata`: cadena JSON con los parámetros de adquisición.
 
 ---
 
